@@ -1,238 +1,299 @@
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+#!/usr/bin/env python3
+"""
+Enhanced Algo Trading Scheduler with Holiday Support
+Continuous option chain data collection with intelligent scheduling
+"""
+
 import time
-import schedule
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from loguru import logger
+import logging
+import datetime
+import os
+import sys
+from typing import Optional, Dict, Any
 
-from market_hours import is_market_open, is_trading_day
+# Add src to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from market_hours_enhanced import market_detector, is_market_open, get_market_status, get_time_until_market_open
+from nse_scraper_working import FixedNSEScraper
 from option_chain_fixed import OptionChainFixed
-from nse_scraper_enhanced import EnhancedNSEScraper
-
-IST = ZoneInfo("Asia/Kolkata")
+from db_writer import upsert_option_chain_snapshot
 
 # Configure logging
-logger.add(
-    "/opt/algotrading/logs/scheduler.log",
-    rotation="1 day",
-    retention="30 days",
-    level="INFO",
-    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
+logger = logging.getLogger(__name__)
 
 class AlgoTradingScheduler:
-    """Scheduler for algo trading data collection and analysis tasks."""
+    """Enhanced scheduler with holiday-aware market hours detection"""
     
     def __init__(self):
-        self.scraper = EnhancedNSEScraper()
+        self.scraper = FixedNSEScraper()
         self.option_chain = OptionChainFixed()
-        self.running = False
+        self.running = True
+        self.collection_stats = {
+            'total_collections': 0,
+            'successful_collections': 0,
+            'failed_collections': 0,
+            'last_collection': None,
+            'last_success': None,
+            'last_failure': None,
+            'consecutive_failures': 0
+        }
         
-        logger.info("🚀 Algo Trading Scheduler initialized")
+        logger.info("🚀 Enhanced Algo Trading Scheduler initialized with holiday support")
     
-    def collect_option_chain(self):
-        """Collect option chain data during market hours."""
+    def health_check(self) -> Dict[str, Any]:
+        """Comprehensive health check with holiday information"""
+        current_time = datetime.datetime.now()
+        market_info = market_detector.get_trading_session_info(current_time)
+        
+        return {
+            'timestamp': current_time,
+            'status': 'healthy' if self.running else 'stopped',
+            'market_status': market_info['market_status'],
+            'is_trading_day': market_info['is_trading_day'],
+            'is_market_open': market_info['is_market_open'],
+            'time_until_open': market_info['time_until_open'],
+            'next_trading_day': market_info['next_trading_day'],
+            'collection_stats': self.collection_stats.copy(),
+            'upcoming_holidays': market_info['upcoming_holidays'][:3]
+        }
+    
+    def collect_nifty_chain(self) -> bool:
+        """Collect NIFTY option chain data"""
         try:
-            if not is_market_open():
-                logger.info("⏰ Market closed - skipping option chain collection")
-                return
+            logger.info("🔍 Collecting NIFTY option chain...")
             
-            logger.info("📊 Starting option chain data collection")
-            result = self.option_chain.run_snapshot("NIFTY")
+            # Get option chain data
+            data = self.scraper.get_option_chain('NIFTY')
+            if not data:
+                logger.warning("⚠️ No NIFTY data received")
+                return False
             
-            if result:
-                logger.info(f"✅ Option chain collected: {result['strikes_captured']} strikes, PCR: {result['pcr']}")
+            # Process analytics
+            snapshot_time = datetime.datetime.now()
+            rows = self.option_chain.parse(data, snapshot_time, 'NIFTY')
+            
+            if not rows:
+                logger.warning("⚠️ No NIFTY data parsed")
+                return False
+            
+            # Save to database
+            success = upsert_option_chain_snapshot(rows)
+            
+            if success:
+                pcr = self.option_chain.compute_pcr(rows)
+                logger.info(f"✅ NIFTY chain collected: {len(rows)} strikes, PCR: {pcr:.4f}")
+                return True
             else:
-                logger.warning("⚠️ Option chain collection returned no data")
+                logger.error("❌ Failed to save NIFTY chain to database")
+                return False
                 
         except Exception as e:
-            logger.error(f"❌ Option chain collection failed: {e}")
+            logger.error(f"❌ NIFTY chain collection failed: {str(e)}")
+            return False
     
-    def collect_banknifty_chain(self):
-        """Collect BANKNIFTY option chain data."""
+    def collect_banknifty_chain(self) -> bool:
+        """Collect BANKNIFTY option chain data"""
         try:
-            if not is_market_open():
-                logger.info("⏰ Market closed - skipping BANKNIFTY chain collection")
-                return
+            logger.info("🔍 Collecting BANKNIFTY option chain...")
             
-            logger.info("📈 Starting BANKNIFTY option chain collection")
-            result = self.option_chain.run_snapshot("BANKNIFTY")
+            # Get option chain data
+            data = self.scraper.get_option_chain('BANKNIFTY')
+            if not data:
+                logger.warning("⚠️ No BANKNIFTY data received")
+                return False
             
-            if result:
-                logger.info(f"✅ BANKNIFTY chain collected: {result['strikes_captured']} strikes, PCR: {result['pcr']}")
+            # Process analytics
+            snapshot_time = datetime.datetime.now()
+            rows = self.option_chain.parse(data, snapshot_time, 'BANKNIFTY')
+            
+            if not rows:
+                logger.warning("⚠️ No BANKNIFTY data parsed")
+                return False
+            
+            # Save to database
+            success = upsert_option_chain_snapshot(rows)
+            
+            if success:
+                pcr = self.option_chain.compute_pcr(rows)
+                logger.info(f"✅ BANKNIFTY chain collected: {len(rows)} strikes, PCR: {pcr:.4f}")
+                return True
             else:
-                logger.warning("⚠️ BANKNIFTY chain collection returned no data")
+                logger.error("❌ Failed to save BANKNIFTY chain to database")
+                return False
                 
         except Exception as e:
-            logger.error(f"❌ BANKNIFTY chain collection failed: {e}")
+            logger.error(f"❌ BANKNIFTY chain collection failed: {str(e)}")
+            return False
     
-    def market_open_routine(self):
-        """Tasks to run at market open."""
-        try:
-            logger.info("🌅 Market open routine started")
-            
-            # Initialize scraper session
-            self.scraper._init_session()
-            logger.info("✅ Scraper session initialized for market open")
-            
-            # Collect initial option chains
-            self.collect_option_chain()
-            self.collect_banknifty_chain()
-            
-            logger.info("✅ Market open routine completed")
-            
-        except Exception as e:
-            logger.error(f"❌ Market open routine failed: {e}")
-    
-    def market_close_routine(self):
-        """Tasks to run at market close."""
-        try:
-            logger.info("🌇 Market close routine started")
-            
-            # Final option chain collection
-            self.collect_option_chain()
-            self.collect_banknifty_chain()
-            
-            # Clean up scraper session
-            if hasattr(self.scraper, 'session') and self.scraper.session:
-                self.scraper.session.close()
-                logger.info("✅ Scraper session closed")
-            
-            logger.info("✅ Market close routine completed")
-            
-        except Exception as e:
-            logger.error(f"❌ Market close routine failed: {e}")
-    
-    def health_check(self):
-        """Periodic health check of the scheduler."""
-        try:
-            now = datetime.now(tz=IST)
-            is_open = is_market_open()
-            is_trading = is_trading_day()
-            
-            logger.info(f"🏥 Health check - Time: {now.strftime('%H:%M:%S')}, Market Open: {is_open}, Trading Day: {is_trading}")
-            
-        except Exception as e:
-            logger.error(f"❌ Health check failed: {e}")
-    
-    def setup_schedule(self):
-        """Setup the trading schedule."""
-        logger.info("📅 Setting up trading schedule")
+    def collect_both_chains(self) -> bool:
+        """Collect both NIFTY and BANKNIFTY option chains"""
+        nifty_success = self.collect_nifty_chain()
+        banknifty_success = self.collect_banknifty_chain()
         
-        # Market open routine (9:15 AM)
-        schedule.every().monday.at("09:15").do(self.market_open_routine)
-        schedule.every().tuesday.at("09:15").do(self.market_open_routine)
-        schedule.every().wednesday.at("09:15").do(self.market_open_routine)
-        schedule.every().thursday.at("09:15").do(self.market_open_routine)
-        schedule.every().friday.at("09:15").do(self.market_open_routine)
+        return nifty_success or banknifty_success  # Success if at least one works
+    
+    def update_stats(self, success: bool):
+        """Update collection statistics"""
+        self.collection_stats['total_collections'] += 1
+        self.collection_stats['last_collection'] = datetime.datetime.now()
         
-        # Health checks (every hour)
-        schedule.every().hour.do(self.health_check)
-        
-        logger.info("✅ Trading schedule setup completed")
+        if success:
+            self.collection_stats['successful_collections'] += 1
+            self.collection_stats['last_success'] = datetime.datetime.now()
+            self.collection_stats['consecutive_failures'] = 0
+        else:
+            self.collection_stats['failed_collections'] += 1
+            self.collection_stats['last_failure'] = datetime.datetime.now()
+            self.collection_stats['consecutive_failures'] += 1
     
     def run_continuous_collection(self):
-        """Run continuous option chain collection every 15 minutes during market hours."""
-        logger.info("🔄 Starting continuous collection mode")
+        """Run continuous data collection with holiday-aware scheduling"""
+        logger.info("🔄 Starting continuous option chain collection with holiday support")
         
         while self.running:
             try:
-                if is_market_open():
-                    logger.info("📊 Running continuous collection")
-                    self.collect_option_chain()
-                    self.collect_banknifty_chain()
-                else:
-                    logger.info("⏰ Market closed - waiting 15 minutes")
+                current_time = datetime.datetime.now()
+                market_status = get_market_status(current_time)
                 
-                # Wait 15 minutes
-                for _ in range(15):  # Check every minute if still running
-                    if not self.running:
-                        break
-                    time.sleep(60)
+                # Log current status
+                logger.info(f"🏥 Health check - Time: {current_time.strftime('%H:%M:%S')}, Market Status: {market_status}")
+                
+                if is_market_open(current_time):
+                    # Market is open - collect data
+                    logger.info("📈 Market is open - collecting option chain data")
                     
+                    success = self.collect_both_chains()
+                    self.update_stats(success)
+                    
+                    if success:
+                        # Wait 30 seconds between collections during market hours
+                        sleep_time = 30
+                        logger.info(f"⏰ Waiting {sleep_time} seconds until next collection")
+                    else:
+                        # Wait 60 seconds after failure
+                        sleep_time = 60
+                        logger.warning(f"⚠️ Collection failed, waiting {sleep_time} seconds before retry")
+                        
+                        # Check for consecutive failures
+                        if self.collection_stats['consecutive_failures'] >= 5:
+                            logger.error(f"🚨 {self.collection_stats['consecutive_failures']} consecutive failures - extending wait time")
+                            sleep_time = 300  # 5 minutes
+                    
+                else:
+                    # Market is closed - check why and wait appropriately
+                    time_until_open, message = get_time_until_market_open(current_time)
+                    
+                    if "Weekend" in market_status or "Holiday" in market_status:
+                        logger.info(f"🏖️ {market_status} - {message}")
+                        
+                        # For weekends and holidays, wait longer
+                        if time_until_open > 1440:  # More than a day
+                            sleep_time = 3600  # Check every hour
+                        else:
+                            sleep_time = 900  # Check every 15 minutes
+                    else:
+                        logger.info(f"⏰ Market closed - {message}")
+                        
+                        # For regular market closure, check every 15 minutes
+                        sleep_time = 900
+                    
+                    logger.info(f"💤 Sleeping for {sleep_time} seconds ({sleep_time//60} minutes)")
+                    
+                    # Log upcoming holidays periodically
+                    if current_time.minute % 30 == 0:  # Every 30 minutes
+                        upcoming = market_detector.get_upcoming_holidays(7)
+                        if upcoming:
+                            logger.info("📅 Upcoming holidays:")
+                            for holiday in upcoming[:3]:
+                                logger.info(f"   {holiday['date']}: {holiday['name']}")
+                
+                # Sleep until next check
+                time.sleep(sleep_time)
+                
             except KeyboardInterrupt:
-                logger.info("⏹️ Continuous collection stopped by user")
+                logger.info("🛑 Received keyboard interrupt - stopping scheduler")
                 break
             except Exception as e:
-                logger.error(f"❌ Continuous collection error: {e}")
-                time.sleep(60)  # Wait 1 minute before retrying
+                logger.error(f"💥 Unexpected error in main loop: {str(e)}")
+                logger.info("⏰ Waiting 60 seconds before continuing")
+                time.sleep(60)
+        
+        logger.info("🏁 Scheduler stopped")
     
-    def start(self, mode="scheduled"):
-        """Start the scheduler."""
-        self.running = True
+    def print_status(self):
+        """Print current scheduler status"""
+        health = self.health_check()
         
-        if mode == "scheduled":
-            logger.info("🚀 Starting scheduler in scheduled mode")
-            self.setup_schedule()
-            
-            try:
-                while self.running:
-                    schedule.run_pending()
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                logger.info("⏹️ Scheduler stopped by user")
-                
-        elif mode == "continuous":
-            logger.info("🚀 Starting scheduler in continuous mode")
-            self.run_continuous_collection()
+        print("\n" + "="*60)
+        print("🚀 ENHANCED ALGO TRADING SCHEDULER STATUS")
+        print("="*60)
+        print(f"📅 Current Time: {health['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"📊 Market Status: {health['market_status']}")
+        print(f"🏪 Is Trading Day: {'Yes' if health['is_trading_day'] else 'No'}")
+        print(f"📈 Is Market Open: {'Yes' if health['is_market_open'] else 'No'}")
+        print(f"⏰ Time Until Open: {health['time_until_open'][1]}")
+        print(f"📆 Next Trading Day: {health['next_trading_day']}")
         
-        else:
-            logger.error(f"❌ Unknown mode: {mode}")
-            
-        self.running = False
-        logger.info("🛑 Scheduler stopped")
-    
-    def stop(self):
-        """Stop the scheduler."""
-        logger.info("⏹️ Stopping scheduler...")
-        self.running = False
+        print("\n📈 Collection Statistics:")
+        print(f"   Total Collections: {health['collection_stats']['total_collections']}")
+        print(f"   Successful: {health['collection_stats']['successful_collections']}")
+        print(f"   Failed: {health['collection_stats']['failed_collections']}")
+        success_rate = (health['collection_stats']['successful_collections'] / max(1, health['collection_stats']['total_collections']) * 100)
+        print(f"   Success Rate: {success_rate:.1f}%")
         
-        # Clean up scraper session
-        if hasattr(self.scraper, 'session') and self.scraper.session:
-            self.scraper.session.close()
-            logger.info("✅ Scraper session closed")
+        if health['upcoming_holidays']:
+            print("\n📅 Upcoming Holidays:")
+            for holiday in health['upcoming_holidays']:
+                print(f"   {holiday['date']}: {holiday['name']}")
+        
+        print("="*60)
 
+def main():
+    """Main entry point"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Enhanced Algo Trading Scheduler with Holiday Support')
+    parser.add_argument('command', choices=['continuous', 'status', 'health', 'test'], 
+                       help='Command to run')
+    parser.add_argument('--verbose', '-v', action='store_true', 
+                       help='Enable verbose logging')
+    
+    args = parser.parse_args()
+    
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    
+    scheduler = AlgoTradingScheduler()
+    
+    if args.command == 'continuous':
+        scheduler.run_continuous_collection()
+    elif args.command == 'status':
+        scheduler.print_status()
+    elif args.command == 'health':
+        health = scheduler.health_check()
+        print(f"Status: {health['status']}")
+        print(f"Market: {health['market_status']}")
+        print(f"Trading Day: {health['is_trading_day']}")
+        print(f"Market Open: {health['is_market_open']}")
+    elif args.command == 'test':
+        # Test market hours detection
+        current_time = datetime.datetime.now()
+        print(f"Current Time: {current_time}")
+        print(f"Market Status: {get_market_status(current_time)}")
+        print(f"Is Trading Day: {market_detector.is_trading_day(current_time.date())}")
+        print(f"Is Market Open: {is_market_open(current_time)}")
+        
+        # Test upcoming holidays
+        upcoming = market_detector.get_upcoming_holidays(30)
+        print(f"\nUpcoming Holidays (next 30 days): {len(upcoming)}")
+        for holiday in upcoming[:5]:
+            print(f"  {holiday['date']}: {holiday['name']} ({holiday['type']})")
 
 if __name__ == "__main__":
-    # Test the scheduler
-    scheduler = AlgoTradingScheduler()
-    
-    print("=== Algo Trading Scheduler Test ===")
-    print(f"Current Time: {datetime.now(tz=IST).strftime('%Y-%m-%d %H:%M:%S IST')}")
-    print(f"Is Market Open: {is_market_open()}")
-    print(f"Is Trading Day: {is_trading_day()}")
-    print()
-    
-    # Test individual functions
-    print("=== Testing Functions ===")
-    try:
-        scheduler.health_check()
-        print("✅ Health check completed")
-    except Exception as e:
-        print(f"❌ Health check failed: {e}")
-    
-    print()
-    print("=== Scheduler Ready ===")
-    print("Usage:")
-    print("  python src/scheduler.py  # Test mode")
-    print("  Continuous mode: scheduler.start('continuous')")
-    print("  Scheduled mode: scheduler.start('scheduled')")
-    print()
-    print("✅ Scheduler module test completed!")
-
-if __name__ == '__main__':
-    import sys
-    import os
-    
-    # Add current directory to Python path for direct execution
-    sys.path.insert(0, '/opt/algotrading')
-    
-    from scheduler import AlgoTradingScheduler
-    
-    # Get mode from command line argument or default to continuous
-    mode = sys.argv[1] if len(sys.argv) > 1 else 'continuous'
-    
-    scheduler = AlgoTradingScheduler()
-    scheduler.start(mode)
+    main()
