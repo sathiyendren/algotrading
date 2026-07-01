@@ -1,22 +1,22 @@
 from loguru import logger
-from sqlalchemy.dialects.postgresql import insert
-
 from data_validator import validate_and_gate, ValidationError
 from notifier import alert   # for Telegram alerts
+from sqlalchemy.dialects.postgresql import insert
+
 from cache import cache_participant_oi
 from db.session import SessionLocal
 from db.models import ParticipantOI, FIIDIICash
 
 
 def upsert_participant_oi(records: list[dict]):
-    """Insert or update participant OI — safe to run multiple times per day."""
-    # Validate first — raises ValidationError if data is bad
+n    # Validate first — raises ValidationError if data is bad
     try:
         validate_and_gate(records, "participant_oi")
     except ValidationError as e:
         alert(f"⚠️ Participant OI validation FAILED — DB write skipped\n{e}")
         return  # do not write bad data
 
+    """Insert or update participant OI — safe to run multiple times per day."""
     with SessionLocal() as db:
         for rec in records:
             stmt = insert(ParticipantOI).values(**rec)
@@ -33,19 +33,18 @@ def upsert_participant_oi(records: list[dict]):
             db.execute(stmt)
         db.commit()
 
-    # Cache after successful DB write
+    # NEW — cache after successful DB write
     cache_participant_oi(records)
     logger.info(f"Upserted and cached {len(records)} participant OI rows")
 
 
 def upsert_fii_dii_cash(records: list[dict]):
-    """Insert or update FII/DII cash data."""
-    try:
+n    try:
         validate_and_gate(records, "fii_dii_cash")
     except ValidationError as e:
         alert(f"⚠️ FII/DII cash validation FAILED — DB write skipped\n{e}")
         return
-
+    """Insert or update FII/DII cash data."""
     with SessionLocal() as db:
         for rec in records:
             stmt = insert(FIIDIICash).values(**rec)
