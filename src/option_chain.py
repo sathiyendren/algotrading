@@ -9,7 +9,6 @@ from src.nse_scraper import NSEScraper
 from src.db.session import SessionLocal
 from src.db.models import OptionChainSnapshot
 
-from cache import cache_option_chain, cache_pcr, cache_max_pain
 load_dotenv("/opt/algotrading/.env")
 
 logger.add(
@@ -39,7 +38,7 @@ class OptionChain:
         raw = self.scraper._get(endpoint)
         return raw
 
-    def parse(self, raw: dict, snapshot_time: datetime) -> list[dict]:
+    def parse(self, raw: dict, snapshot_time: datetime, symbol: str = "BANKNIFTY") -> list[dict]:
         """
         Parse NSE option chain JSON into flat row-per-strike format.
         Returns list of dicts ready for DB insert.
@@ -187,11 +186,10 @@ class OptionChain:
         buildup = self.detect_oi_buildup(rows)
 
         self.save_snapshot(rows)
-n        # NEW — write to Redis cache
+
         cache_option_chain(symbol, rows)
         cache_pcr(symbol, pcr)
         cache_max_pain(symbol, max_pain)
-
         return {
             "snapshot_time": snapshot_time,
             "strikes_captured": len(rows),

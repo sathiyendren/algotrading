@@ -1,11 +1,11 @@
 from loguru import logger
 from sqlalchemy.dialects.postgresql import insert
 
-from data_validator import validate_and_gate, ValidationError
-from notifier import alert   # for Telegram alerts
-from cache import cache_participant_oi
-from db.session import SessionLocal
-from db.models import ParticipantOI, FIIDIICash
+from src.data_validator import validate_and_gate, ValidationError
+# from src.notifier import alert   # for Telegram alerts
+from src.cache import cache_participant_oi
+from src.db.session import SessionLocal
+from src.db.models import ParticipantOI, FIIDIICash
 
 
 def upsert_participant_oi(records: list[dict]):
@@ -52,8 +52,8 @@ def upsert_fii_dii_cash(records: list[dict]):
             stmt = stmt.on_conflict_do_update(
                 constraint="uq_fii_dii_cash",
                 set_={
-                    "fii_cash": stmt.excluded.fii_cash,
-                    "dii_cash": stmt.excluded.dii_cash,
+                    "buy_value": stmt.excluded.buy_value,
+                    "sell_value": stmt.excluded.sell_value,
                     "scraped_at": stmt.excluded.scraped_at,
                 },
             )
