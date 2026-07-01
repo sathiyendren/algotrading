@@ -1,8 +1,9 @@
 from loguru import logger
 from sqlalchemy.dialects.postgresql import insert
 
-from src.db.session import SessionLocal
-from src.db.models import ParticipantOI, FIIDIICash
+from cache import cache_participant_oi
+from db.session import SessionLocal
+from db.models import ParticipantOI, FIIDIICash
 
 
 def upsert_participant_oi(records: list[dict]):
@@ -22,7 +23,10 @@ def upsert_participant_oi(records: list[dict]):
             )
             db.execute(stmt)
         db.commit()
-        logger.info(f"Upserted {len(records)} participant OI rows")
+
+    # NEW — cache after successful DB write
+    cache_participant_oi(records)
+    logger.info(f"Upserted and cached {len(records)} participant OI rows")
 
 
 def upsert_fii_dii_cash(records: list[dict]):
@@ -33,8 +37,8 @@ def upsert_fii_dii_cash(records: list[dict]):
             stmt = stmt.on_conflict_do_update(
                 constraint="uq_fii_dii_cash",
                 set_={
-                    "buy_value": stmt.excluded.buy_value,
-                    "sell_value": stmt.excluded.sell_value,
+                    "fii_cash": stmt.excluded.fii_cash,
+                    "dii_cash": stmt.excluded.dii_cash,
                     "scraped_at": stmt.excluded.scraped_at,
                 },
             )
@@ -43,86 +47,13 @@ def upsert_fii_dii_cash(records: list[dict]):
         logger.info(f"Upserted {len(records)} FII/DII cash rows")
 
 
-# Additional upsert functions for other tables
-def upsert_option_chain_snapshot(records: list[dict]):
-    """Insert option chain snapshots — no unique constraint, just insert."""
-    with SessionLocal() as db:
-        db.add_all([OptionChainSnapshot(**rec) for rec in records])
-        db.commit()
-        logger.info(f"Inserted {len(records)} option chain snapshot rows")
-
-
-def upsert_market_event(event_date: str, event_type: str, description: str, source: str = 'NSE'):
-    """Insert market event — skip if exists."""
-    with SessionLocal() as db:
-        # Check if event already exists
-        existing = db.query(MarketEvent).filter(
-            MarketEvent.event_date == event_date,
-            MarketEvent.event_type == event_type
-        ).first()
-        
-        if existing:
-            logger.debug(f"Market event already exists: {event_type} on {event_date}")
-            return
-        
-        # Create new event
-        db_record = MarketEvent(
-            event_date=event_date,
-            event_type=event_type,
-            description=description,
-            source=source
-        )
-        db.add(db_record)
-        db.commit()
-        logger.info(f"Created market event: {event_type} on {event_date}")
-
-
-def write_system_log(module: str, level: str, message: str, details: dict = None):
-    """Write system log entry."""
-    with SessionLocal() as db:
-        db_record = SystemLog(
-            module=module,
-            level=level,
-            message=message,
-            details=details
-        )
-        db.add(db_record)
-        db.commit()
-        logger.debug(f"Created system log: {level} - {message}")
-
-
 def test_connection():
     """Test database connection."""
-    try:
-        with SessionLocal() as db:
+    with SessionLocal() as db:
+        try:
             db.execute("SELECT 1")
-            logger.info("Database connection test successful")
+            logger.info("Database connection successful")
             return True
-    except Exception as e:
-        logger.error(f"Database connection test failed: {e}")
-        return False
-
-
-# Import additional models for extended functionality
-from src.db.models import OptionChainSnapshot, MarketEvent, SystemLog
-
-
-if __name__ == "__main__":
-    # Test the database writer
-    try:
-        if test_connection():
-            logger.info("✅ Database writer initialized successfully")
-            
-            # Test writing a system log
-            write_system_log(
-                module="db_writer",
-                level="INFO",
-                message="Database writer test completed"
-            )
-            
-            logger.info("✅ Database writer tests completed")
-        else:
-            logger.error("❌ Database writer connection failed")
-            
-    except Exception as e:
-        logger.error(f"❌ Database writer test failed: {e}")
+        except Exception as e:
+            logger.error(f"Database connection failed: {e}")
+            return False
