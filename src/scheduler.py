@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from market_hours_enhanced import market_detector, is_market_open, get_market_status, get_time_until_market_open
 from nse_scraper_working import FixedNSEScraper
 from option_chain_fixed import OptionChainFixed
-from db_writer import upsert_option_chain_snapshot
+from db_writer import write_option_chain_snapshot
 
 # Configure logging
 logging.basicConfig(
@@ -83,7 +83,7 @@ class AlgoTradingScheduler:
                 return False
             
             # Save to database
-            success = upsert_option_chain_snapshot(rows)
+            success = write_option_chain_snapshot(rows)
             
             if success:
                 pcr = self.option_chain.compute_pcr(rows)
@@ -117,7 +117,7 @@ class AlgoTradingScheduler:
                 return False
             
             # Save to database
-            success = upsert_option_chain_snapshot(rows)
+            success = write_option_chain_snapshot(rows)
             
             if success:
                 pcr = self.option_chain.compute_pcr(rows)

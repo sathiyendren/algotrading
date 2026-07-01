@@ -5,9 +5,9 @@ from zoneinfo import ZoneInfo
 from loguru import logger
 from dotenv import load_dotenv
 
-from src.nse_scraper import NSEScraper
-from src.db.session import SessionLocal
-from src.db.models import OptionChainSnapshot
+from nse_scraper import NSEScraper
+from db.session import SessionLocal
+from db.models import OptionChainSnapshot
 
 load_dotenv("/opt/algotrading/.env")
 

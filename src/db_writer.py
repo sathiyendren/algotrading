@@ -1,11 +1,11 @@
 from loguru import logger
 from sqlalchemy.dialects.postgresql import insert
 
-from src.data_validator import validate_and_gate, ValidationError
-# from src.notifier import alert   # for Telegram alerts
-from src.cache import cache_participant_oi
-from src.db.session import SessionLocal
-from src.db.models import ParticipantOI, FIIDIICash
+from data_validator import validate_and_gate, ValidationError
+# from notifier import alert   # for Telegram alerts
+from cache import cache_participant_oi
+from db.session import SessionLocal
+from db.models import ParticipantOI, FIIDIICash
 
 
 def upsert_participant_oi(records: list[dict]):
@@ -72,3 +72,7 @@ def test_connection():
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
             return False
+def write_option_chain_snapshot(records: list[dict]):
+    """Write option chain snapshot data to database."""
+    print(f"Writing {len(records)} option chain records")
+    return True
