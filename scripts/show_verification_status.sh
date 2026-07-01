@@ -14,7 +14,7 @@ if [ -f "$LOG_FILE" ]; then
         echo "📝 Latest entries:"
         tail -20 "$LOG_FILE" | grep -E "(VERIFICATION|PARTICIPANT|FII/DII|PCR|Snapshots)"
     else
-        echo "⏳ Verification not yet run for $TODAY (scheduled for 4:05 PM)"
+        echo "⏳ Verification not yet run for $TODAY (scheduled for 4:35 PM)"
     fi
     
     echo ""
@@ -25,5 +25,5 @@ else
 fi
 
 echo ""
-echo "⏰ Next scheduled run: Today at 4:05 PM"
+echo "⏰ Next scheduled run: Today at 4:35 PM"
 echo "📂 Log location: $LOG_FILE"
