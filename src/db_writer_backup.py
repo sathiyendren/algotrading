@@ -2,8 +2,8 @@ from loguru import logger
 nfrom cache import cache_participant_oi
 from sqlalchemy.dialects.postgresql import insert
 
-from src.db.session import SessionLocal
-from src.db.models import ParticipantOI, FIIDIICash
+from db.session import SessionLocal
+from db.models import ParticipantOI, FIIDIICash
 
 
 def upsert_participant_oi(records: list[dict]):
@@ -105,7 +105,7 @@ def test_connection():
 
 
 # Import additional models for extended functionality
-from src.db.models import OptionChainSnapshot, MarketEvent, SystemLog
+from db.models import OptionChainSnapshot, MarketEvent, SystemLog
 
 
 if __name__ == "__main__":

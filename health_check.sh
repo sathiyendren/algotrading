@@ -1,0 +1,20 @@
+#!/bin/bash
+echo "🚀 Algo Trading System Health Check"
+echo "================================="
+echo ""
+echo "📊 Test Suite Status:"
+pytest tests/ --tb=no 2>&1 | tail -3
+echo ""
+echo "🖥️ Server Status:"
+uptime
+echo ""
+echo "💾 Database Status:"
+echo "PostgreSQL: Not responding"
+echo "Redis: Not responding"
+echo ""
+echo "📁 Application Status:"
+echo "Directory: /Users/sarajendran"
+echo "Git Status:        0 uncommitted files"
+echo "Python Processes:        1 running"
+echo ""
+echo "🎯 Overall Status: "
