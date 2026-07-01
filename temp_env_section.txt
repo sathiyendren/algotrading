@@ -1,0 +1,5 @@
+# Add your model's MetaData object here for 'autogenerate' support
+import sys
+sys.path.insert(0, /opt/algotrading/src)
+from db.models import Base
+target_metadata = Base.metadata
