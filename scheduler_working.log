@@ -1,0 +1,8 @@
+2026-07-01 05:32:07.314 | INFO     | cache:__init__:30 - Redis cache initialized successfully
+2026-07-01 05:32:07.364 | WARNING  | nse_scraper_working:_init_session:42 - ⚠️ Homepage visit failed: 403 Client Error: Forbidden for url: https://www.nseindia.com/
+2026-07-01 05:32:07.443 | WARNING  | nse_scraper_working:_init_session:42 - ⚠️ Homepage visit failed: 403 Client Error: Forbidden for url: https://www.nseindia.com/
+2026-07-01 05:32:07 | INFO     | __main__:47 - 🚀 Enhanced Algo Trading Scheduler initialized with holiday support
+2026-07-01 05:32:07 | INFO     | __main__:157 - 🔄 Starting continuous option chain collection with holiday support
+2026-07-01 05:32:07 | INFO     | __main__:165 - 🏥 Health check - Time: 05:32:07, Market Status: Pre-market (Closed)
+2026-07-01 05:32:07 | INFO     | __main__:201 - ⏰ Market closed - Market opens in 222 minutes
+2026-07-01 05:32:07 | INFO     | __main__:206 - 💤 Sleeping for 900 seconds (15 minutes)
